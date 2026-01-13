@@ -358,37 +358,36 @@ async function run() {
     // });
     // ================================================================
 
+    app.get("/api/content/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: "Invalid content ID" });
+        }
 
-app.get("/api/content/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid content ID" });
-    }
-    
-    const content = await contentsCollection.findOne({
-      _id: new ObjectId(id)
+        const content = await contentsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!content) {
+          return res.status(404).json({ error: "Content not found" });
+        }
+
+        res.json(content);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch content" });
+      }
     });
-    
-    if (!content) {
-      return res.status(404).json({ error: "Content not found" });
-    }
-    
-    res.json(content);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch content" });
-  }
-});
-app.get("/api/contents", async (req, res) => {
-  try {
-    const data = await contentsCollection.find().toArray();
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch contents" });
-  }
-});
+    app.get("/api/contents", async (req, res) => {
+      try {
+        const data = await contentsCollection.find().toArray();
+        res.json(data);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch contents" });
+      }
+    });
 
     app.post("/api/content/upload", upload.single("file"), async (req, res) => {
       try {
@@ -435,37 +434,40 @@ app.get("/api/contents", async (req, res) => {
         console.error(err);
         if (req.file && fs.existsSync(req.file.path))
           fs.unlinkSync(req.file.path);
-        res
-          .status(500)
-          .json({
-            success: false,
-            message: "Upload failed",
-            error: err.message,
-          });
+        res.status(500).json({
+          success: false,
+          message: "Upload failed",
+          error: err.message,
+        });
       }
     });
 
-app.get("/api/content/module/:moduleId", async (req, res) => {
-  try {
-    const moduleId = req.params.moduleId.trim(); // Trim the incoming ID
-    console.log("Fetching content for module (trimmed):", moduleId);
-    
-    // Also query with regex to handle cases with trailing whitespace
-    const data = await contentsCollection
-      .find({ 
-        moduleId: { 
-          $regex: new RegExp(`^${moduleId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i')
-        }
-      })
-      .toArray();
+    app.get("/api/content/module/:moduleId", async (req, res) => {
+      try {
+        const moduleId = req.params.moduleId.trim(); // Trim the incoming ID
+        console.log("Fetching content for module (trimmed):", moduleId);
 
-    console.log("Found contents:", data.length);
-    res.json(data);
-  } catch (err) {
-    console.error("Error in /api/content/module/:moduleId:", err);
-    res.status(500).json({ error: "Failed to fetch contents", details: err.message });
-  }
-});
+        // Also query with regex to handle cases with trailing whitespace
+        const data = await contentsCollection
+          .find({
+            moduleId: {
+              $regex: new RegExp(
+                `^${moduleId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+                "i"
+              ),
+            },
+          })
+          .toArray();
+
+        console.log("Found contents:", data.length);
+        res.json(data);
+      } catch (err) {
+        console.error("Error in /api/content/module/:moduleId:", err);
+        res
+          .status(500)
+          .json({ error: "Failed to fetch contents", details: err.message });
+      }
+    });
     // ================================================================
     app.put("/api/content/:id", async (req, res) => {
       await contentsCollection.updateOne(
@@ -504,6 +506,223 @@ app.get("/api/content/module/:moduleId", async (req, res) => {
         message: "CWT Backend running",
         timestamp: new Date().toISOString(),
       });
+    });
+
+    // Add these endpoints in your run() function after the existing user routes
+
+    // 1. Update user by ID (for role changes in admin dashboard)
+    app.patch("/api/users/id/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Invalid user ID" });
+        }
+
+        const updateData = req.body;
+
+        // Remove protected fields
+        delete updateData._id;
+        delete updateData.uid;
+        delete updateData.email;
+        delete updateData.createdAt;
+
+        updateData.updatedAt = new Date().toISOString();
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .json({ success: false, message: "User not found" });
+        }
+
+        const updatedUser = await usersCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        res.json({
+          success: true,
+          message: "User updated successfully",
+          user: updatedUser,
+        });
+      } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).json({ success: false, message: "Update failed" });
+      }
+    });
+
+    // 2. Quick role change endpoint
+    app.patch("/api/users/:id/role", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { role } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Invalid user ID" });
+        }
+
+        if (
+          !role ||
+          !["student", "prostudent", "admin", "superadmin", "editor"].includes(
+            role
+          )
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Valid role required: student, prostudent, admin, superadmin, editor",
+          });
+        }
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              role: role,
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .json({ success: false, message: "User not found" });
+        }
+
+        const updatedUser = await usersCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        res.json({
+          success: true,
+          message: `User role changed to ${role}`,
+          user: updatedUser,
+        });
+      } catch (error) {
+        console.error("Error changing role:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "Failed to change role" });
+      }
+    });
+
+    // 3. Get user role statistics
+    app.get("/api/users/stats/roles", async (req, res) => {
+      try {
+        // Get counts for each role
+        const roles = [
+          "student",
+          "prostudent",
+          "admin",
+          "superadmin",
+          "editor",
+        ];
+        const roleCounts = {};
+
+        for (const role of roles) {
+          const count = await usersCollection.countDocuments({ role: role });
+          roleCounts[role] = count;
+        }
+
+        // Count other roles
+        const otherCount = await usersCollection.countDocuments({
+          role: { $nin: roles },
+        });
+        roleCounts.other = otherCount;
+
+        // Get active/inactive counts
+        const activeCount = await usersCollection.countDocuments({
+          status: "active",
+        });
+        const inactiveCount = await usersCollection.countDocuments({
+          status: "inactive",
+        });
+        const pendingCount = await usersCollection.countDocuments({
+          status: "pending",
+        });
+
+        res.json({
+          success: true,
+          stats: {
+            roleDistribution: roleCounts,
+            statusDistribution: {
+              active: activeCount,
+              inactive: inactiveCount,
+              pending: pendingCount,
+            },
+            totalUsers: Object.values(roleCounts).reduce((a, b) => a + b, 0),
+          },
+        });
+      } catch (error) {
+        console.error("Error getting role stats:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "Failed to get statistics" });
+      }
+    });
+
+    // 4. Search users with role filter
+    app.get("/api/users/search", async (req, res) => {
+      try {
+        const { q, role, status, page = 1, limit = 20 } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build search query
+        const query = {};
+
+        if (q) {
+          query.$or = [
+            { name: { $regex: q, $options: "i" } },
+            { email: { $regex: q, $options: "i" } },
+            { displayName: { $regex: q, $options: "i" } },
+            { phone: { $regex: q, $options: "i" } },
+          ];
+        }
+
+        if (role && role !== "all") {
+          query.role = role;
+        }
+
+        if (status && status !== "all") {
+          query.status = status;
+        }
+
+        // Get users with pagination
+        const users = await usersCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .toArray();
+
+        // Get total count
+        const total = await usersCollection.countDocuments(query);
+
+        res.json({
+          success: true,
+          users,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            pages: Math.ceil(total / limitNum),
+          },
+        });
+      } catch (error) {
+        console.error("Error searching users:", error);
+        res.status(500).json({ success: false, message: "Search failed" });
+      }
     });
 
     app.get("/api/users", async (req, res) => {
