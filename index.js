@@ -232,7 +232,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // await client.connect();
-    console.log("Connected to MongoDB");
+    // console.log("Connected to MongoDB");
 
     const usersCollection = client.db("CWT").collection("users");
     const milestonesCollection = client.db("CWT").collection("milestones");
@@ -400,75 +400,190 @@ async function run() {
     //   }
     // });
 
-    app.post("/api/content/upload", upload.single("file"), async (req, res) => {
+    // app.post("/api/content/upload", upload.single("file"), async (req, res) => {
+    //   try {
+    //     if (!req.file)
+    //       return res
+    //         .status(400)
+    //         .json({ success: false, message: "No file uploaded" });
+
+    //     const ext = path.extname(req.file.originalname).toLowerCase();
+
+    //     let resource_type = "auto";
+    //     if (ext === ".pdf" || ext === ".doc" || ext === ".docx")
+    //       resource_type = "raw";
+    //     else if (req.file.mimetype.startsWith("video")) resource_type = "video";
+    //     else if (req.file.mimetype.startsWith("audio")) resource_type = "video";
+
+    //     const uploadResult = await new Promise((resolve, reject) => {
+    //       const stream = cloudinary.uploader.upload_stream(
+    //         {
+    //           folder: "cwt-content",
+    //           resource_type,
+    //           chunk_size: 6000000,
+    //           use_filename: true,
+    //           unique_filename: true,
+    //         },
+    //         (err, result) => (err ? reject(err) : resolve(result))
+    //       );
+    //       stream.end(req.file.buffer);
+    //     });
+
+    //     const contentDoc = {
+    //       title: req.body.title || req.file.originalname,
+    //       type: req.body.type || req.file.mimetype.split("/")[0],
+    //       url: uploadResult.secure_url,
+    //       publicId: uploadResult.public_id,
+    //       moduleId: req.body.moduleId,
+    //       createdAt: new Date().toISOString(),
+    //     };
+
+    //     await contentsCollection.insertOne(contentDoc);
+
+    //     res.json({
+    //       success: true,
+    //       message: "File uploaded",
+    //       content: contentDoc,
+    //     });
+    //   } catch (err) {
+    //     res.status(500).json({
+    //       success: false,
+    //       message: "Upload failed",
+    //       error: err.message,
+    //     });
+    //   }
+    // });
+
+    // app.get("/api/content/module/:moduleId", async (req, res) => {
+    //   try {
+    //     const moduleId = req.params.moduleId.trim(); // Trim the incoming ID
+    //     console.log("Fetching content for module (trimmed):", moduleId);
+
+    //     // Also query with regex to handle cases with trailing whitespace
+    //     const data = await contentsCollection
+    //       .find({
+    //         moduleId: {
+    //           $regex: new RegExp(
+    //             `^${moduleId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+    //             "i"
+    //           ),
+    //         },
+    //       })
+    //       .toArray();
+
+    //     console.log("Found contents:", data.length);
+    //     res.json(data);
+    //   } catch (err) {
+    //     console.error("Error in /api/content/module/:moduleId:", err);
+    //     res
+    //       .status(500)
+    //       .json({ error: "Failed to fetch contents", details: err.message });
+    //   }
+    // });
+    // // ================================================================
+    // app.put("/api/content/:id", async (req, res) => {
+    //   await contentsCollection.updateOne(
+    //     { _id: new ObjectId(req.params.id) },
+    //     { $set: { ...req.body } }
+    //   );
+    //   const data = await contentsCollection.findOne({
+    //     _id: new ObjectId(req.params.id),
+    //   });
+    //   res.json(data);
+    // });
+
+    // app.delete("/api/content/:id", async (req, res) => {
+    //   const item = await contentsCollection.findOne({
+    //     _id: new ObjectId(req.params.id),
+    //   });
+    //   if (item?.publicId)
+    //     await cloudinary.uploader.destroy(item.publicId, {
+    //       resource_type: "auto",
+    //     });
+    //   await contentsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+    //   res.json({ success: true });
+    // });
+
+    // ==================== REPLACED UPLOAD ENDPOINT ====================
+    // This just saves the URL that was uploaded from frontend to Cloudinary
+    app.post("/api/content/upload", async (req, res) => {
       try {
-        if (!req.file)
-          return res
-            .status(400)
-            .json({ success: false, message: "No file uploaded" });
+        console.log("Save URL request received:", req.body);
 
-        const ext = path.extname(req.file.originalname).toLowerCase();
+        const {
+          title,
+          type,
+          url,
+          moduleId,
+          publicId,
+          fileSize,
+          duration,
+          format,
+          width,
+          height,
+        } = req.body;
 
-        let resource_type = "auto";
-        if (ext === ".pdf" || ext === ".doc" || ext === ".docx")
-          resource_type = "raw";
-        else if (req.file.mimetype.startsWith("video")) resource_type = "video";
-        else if (req.file.mimetype.startsWith("audio")) resource_type = "video";
+        // Validation
+        if (!url) {
+          return res.status(400).json({
+            success: false,
+            message: "URL is required",
+          });
+        }
 
-        const uploadResult = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            {
-              folder: "cwt-content",
-              resource_type,
-              chunk_size: 6000000,
-              use_filename: true,
-              unique_filename: true,
-            },
-            (err, result) => (err ? reject(err) : resolve(result))
-          );
-          stream.end(req.file.buffer);
-        });
+        if (!moduleId) {
+          return res.status(400).json({
+            success: false,
+            message: "Module ID is required",
+          });
+        }
 
         const contentDoc = {
-          title: req.body.title || req.file.originalname,
-          type: req.body.type || req.file.mimetype.split("/")[0],
-          url: uploadResult.secure_url,
-          publicId: uploadResult.public_id,
-          moduleId: req.body.moduleId,
+          title: title || "Untitled Content",
+          type: type || "video",
+          url: url,
+          publicId: publicId || "",
+          moduleId: moduleId,
+          fileSize: fileSize || 0,
+          duration: duration || 0,
+          format: format || "",
+          width: width || 0,
+          height: height || 0,
           createdAt: new Date().toISOString(),
         };
 
-        await contentsCollection.insertOne(contentDoc);
+        console.log("Saving to database:", contentDoc);
+
+        const result = await contentsCollection.insertOne(contentDoc);
+        const savedContent = await contentsCollection.findOne({
+          _id: result.insertedId,
+        });
+
+        console.log("Content saved successfully:", savedContent._id);
 
         res.json({
           success: true,
-          message: "File uploaded",
-          content: contentDoc,
+          message: "Content saved successfully",
+          content: savedContent,
         });
       } catch (err) {
+        console.error("Save content error:", err);
         res.status(500).json({
           success: false,
-          message: "Upload failed",
+          message: "Failed to save content",
           error: err.message,
         });
       }
     });
 
+    // ==================== KEEP YOUR EXISTING GET, PUT, DELETE ENDPOINTS ====================
     app.get("/api/content/module/:moduleId", async (req, res) => {
       try {
-        const moduleId = req.params.moduleId.trim(); // Trim the incoming ID
-        console.log("Fetching content for module (trimmed):", moduleId);
+        const moduleId = req.params.moduleId.trim();
+        console.log("Fetching content for module:", moduleId);
 
-        // Also query with regex to handle cases with trailing whitespace
         const data = await contentsCollection
-          .find({
-            moduleId: {
-              $regex: new RegExp(
-                `^${moduleId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
-                "i"
-              ),
-            },
-          })
+          .find({ moduleId: moduleId })
           .toArray();
 
         console.log("Found contents:", data.length);
@@ -480,28 +595,43 @@ async function run() {
           .json({ error: "Failed to fetch contents", details: err.message });
       }
     });
-    // ================================================================
+
     app.put("/api/content/:id", async (req, res) => {
-      await contentsCollection.updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: { ...req.body } }
-      );
-      const data = await contentsCollection.findOne({
-        _id: new ObjectId(req.params.id),
-      });
-      res.json(data);
+      try {
+        await contentsCollection.updateOne(
+          { _id: new ObjectId(req.params.id) },
+          { $set: { ...req.body } }
+        );
+        const data = await contentsCollection.findOne({
+          _id: new ObjectId(req.params.id),
+        });
+        res.json(data);
+      } catch (err) {
+        console.error("Update error:", err);
+        res.status(500).json({ error: "Failed to update content" });
+      }
     });
 
     app.delete("/api/content/:id", async (req, res) => {
-      const item = await contentsCollection.findOne({
-        _id: new ObjectId(req.params.id),
-      });
-      if (item?.publicId)
-        await cloudinary.uploader.destroy(item.publicId, {
-          resource_type: "auto",
+      try {
+        const item = await contentsCollection.findOne({
+          _id: new ObjectId(req.params.id),
         });
-      await contentsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-      res.json({ success: true });
+
+        if (item?.publicId) {
+          await cloudinary.uploader.destroy(item.publicId, {
+            resource_type: "auto",
+          });
+        }
+
+        await contentsCollection.deleteOne({
+          _id: new ObjectId(req.params.id),
+        });
+        res.json({ success: true });
+      } catch (err) {
+        console.error("Delete error:", err);
+        res.status(500).json({ error: "Failed to delete content" });
+      }
     });
 
     app.get("/", (req, res) => {
