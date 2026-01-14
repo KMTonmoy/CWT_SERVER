@@ -5,7 +5,6 @@ require("dotenv").config();
 
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
-const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -17,9 +16,6 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-
-const uploadFolder = "./uploads";
-if (!fs.existsSync(uploadFolder)) fs.mkdirSync(uploadFolder);
 
 const storage = multer.memoryStorage();
 
@@ -215,7 +211,12 @@ const createVerificationEmail = (code, userName, email) => {
   `;
 };
 
-app.use(cors({ origin: ["http://localhost:3000"], credentials: true }));
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "https://codewithtonmoy.vercel.app"],
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
