@@ -21,10 +21,7 @@ cloudinary.config({
 const uploadFolder = "./uploads";
 if (!fs.existsSync(uploadFolder)) fs.mkdirSync(uploadFolder);
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadFolder),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -318,46 +315,6 @@ async function run() {
       res.json({ success: true });
     });
 
-    // app.post("/api/content/upload", upload.single("file"), async (req, res) => {
-    //   try {
-    //     if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
-
-    //     const ext = path.extname(req.file.originalname).toLowerCase();
-
-    //     let resource_type = "auto";
-    //     if (ext === ".pdf" || ext === ".doc" || ext === ".docx") resource_type = "raw";
-    //     else if (req.file.mimetype.startsWith("video")) resource_type = "video";
-    //     else if (req.file.mimetype.startsWith("audio")) resource_type = "video";
-
-    //     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-    //       folder: "cwt-content",
-    //       resource_type,
-    //       chunk_size: 6000000,
-    //       use_filename: true,
-    //       unique_filename: true,
-    //     });
-
-    //     fs.unlinkSync(req.file.path);
-
-    //     const contentDoc = {
-    //       title: req.body.title || req.file.originalname,
-    //       type: req.file.mimetype.split("/")[0],
-    //       url: uploadResult.secure_url,
-    //       publicId: uploadResult.public_id,
-    //       createdAt: new Date().toISOString(),
-    //     };
-
-    //     await contentsCollection.insertOne(contentDoc);
-
-    //     res.json({ success: true, message: "File uploaded", content: contentDoc });
-    //   } catch (err) {
-    //     console.error(err);
-    //     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    //     res.status(500).json({ success: false, message: "Upload failed", error: err.message });
-    //   }
-    // });
-    // ================================================================
-
     app.get("/api/content/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -389,6 +346,59 @@ async function run() {
       }
     });
 
+    // app.post("/api/content/upload", upload.single("file"), async (req, res) => {
+    //   try {
+    //     if (!req.file)
+    //       return res
+    //         .status(400)
+    //         .json({ success: false, message: "No file uploaded" });
+
+    //     const ext = path.extname(req.file.originalname).toLowerCase();
+
+    //     let resource_type = "auto";
+    //     if (ext === ".pdf" || ext === ".doc" || ext === ".docx")
+    //       resource_type = "raw";
+    //     else if (req.file.mimetype.startsWith("video")) resource_type = "video";
+    //     else if (req.file.mimetype.startsWith("audio")) resource_type = "video";
+
+    //     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+    //       folder: "cwt-content",
+    //       resource_type,
+    //       chunk_size: 6000000,
+    //       use_filename: true,
+    //       unique_filename: true,
+    //     });
+
+    //     fs.unlinkSync(req.file.path);
+
+    //     const contentDoc = {
+    //       title: req.body.title || req.file.originalname,
+    //       type: req.body.type || req.file.mimetype.split("/")[0],
+    //       url: uploadResult.secure_url,
+    //       publicId: uploadResult.public_id,
+    //       moduleId: req.body.moduleId, // Store as string
+    //       createdAt: new Date().toISOString(),
+    //     };
+
+    //     await contentsCollection.insertOne(contentDoc);
+
+    //     res.json({
+    //       success: true,
+    //       message: "File uploaded",
+    //       content: contentDoc,
+    //     });
+    //   } catch (err) {
+    //     console.error(err);
+    //     if (req.file && fs.existsSync(req.file.path))
+    //       fs.unlinkSync(req.file.path);
+    //     res.status(500).json({
+    //       success: false,
+    //       message: "Upload failed",
+    //       error: err.message,
+    //     });
+    //   }
+    // });
+
     app.post("/api/content/upload", upload.single("file"), async (req, res) => {
       try {
         if (!req.file)
@@ -404,22 +414,26 @@ async function run() {
         else if (req.file.mimetype.startsWith("video")) resource_type = "video";
         else if (req.file.mimetype.startsWith("audio")) resource_type = "video";
 
-        const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-          folder: "cwt-content",
-          resource_type,
-          chunk_size: 6000000,
-          use_filename: true,
-          unique_filename: true,
+        const uploadResult = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "cwt-content",
+              resource_type,
+              chunk_size: 6000000,
+              use_filename: true,
+              unique_filename: true,
+            },
+            (err, result) => (err ? reject(err) : resolve(result))
+          );
+          stream.end(req.file.buffer);
         });
-
-        fs.unlinkSync(req.file.path);
 
         const contentDoc = {
           title: req.body.title || req.file.originalname,
           type: req.body.type || req.file.mimetype.split("/")[0],
           url: uploadResult.secure_url,
           publicId: uploadResult.public_id,
-          moduleId: req.body.moduleId, // Store as string
+          moduleId: req.body.moduleId,
           createdAt: new Date().toISOString(),
         };
 
@@ -431,9 +445,6 @@ async function run() {
           content: contentDoc,
         });
       } catch (err) {
-        console.error(err);
-        if (req.file && fs.existsSync(req.file.path))
-          fs.unlinkSync(req.file.path);
         res.status(500).json({
           success: false,
           message: "Upload failed",
